@@ -1,7 +1,4 @@
-import type { KeyFinding } from "@shared/schema";
-import type { HeaderAnalysisResult } from "./headers";
-import type { SensitivePathResult } from "./sensitive-paths";
-import type { SourceMapResult } from "./source-maps";
+import type { KeyFinding, SensitivePathResult, HeaderAnalysisResult, SourceMapResult } from "@shared/schema";
 import type { JWTFinding } from "./jwt-detector";
 
 export interface SecurityScore {
