@@ -1,18 +1,26 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+export const scanRequestSchema = z.object({
+  url: z.string().url("Please enter a valid URL"),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
+export type ScanRequest = z.infer<typeof scanRequestSchema>;
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export interface KeyFinding {
+  keyType: string;
+  value: string;
+  file: string;
+  line?: number;
+  severity: "critical" | "high" | "medium" | "low";
+}
+
+export interface ScanResult {
+  id: string;
+  url: string;
+  scanType: "github" | "website";
+  status: "scanning" | "complete" | "error";
+  findings: KeyFinding[];
+  filesScanned: number;
+  scanDuration: number;
+  error?: string;
+}
