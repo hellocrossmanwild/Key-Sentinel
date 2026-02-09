@@ -53,7 +53,8 @@ const BINARY_EXTENSIONS = new Set([
 
 function shouldSkipFile(filename: string): boolean {
   const lower = filename.toLowerCase();
-  for (const ext of BINARY_EXTENSIONS) {
+  const extArray = Array.from(BINARY_EXTENSIONS);
+  for (const ext of extArray) {
     if (lower.endsWith(ext)) return true;
   }
   if (lower.includes("node_modules/") || lower.includes("vendor/") || lower.includes(".git/")) return true;
