@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { performScan } from "./scanner";
 import { scanRequestSchema, analyzeRequestSchema, summaryRequestSchema } from "@shared/schema";
@@ -9,14 +9,82 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
+function safeJsonParse(content: string): { data: any; error: string | null } {
+  try {
+    return { data: JSON.parse(content), error: null };
+  } catch {
+    const cleaned = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    try {
+      return { data: JSON.parse(cleaned), error: null };
+    } catch {
+      return { data: null, error: "AI returned malformed response. Please try again." };
+    }
+  }
+}
+
+function sanitizeErrorMessage(error: any): string {
+  if (!error) return "An unexpected error occurred.";
+  const msg = error.message || String(error);
+  if (msg.includes("API key") || msg.includes("auth") || msg.includes("OPENAI")) {
+    return "AI service configuration error. Please try again later.";
+  }
+  if (msg.includes("rate limit") || msg.includes("429")) {
+    return "AI service is temporarily busy. Please wait a moment and try again.";
+  }
+  if (msg.includes("timeout") || msg.includes("ETIMEDOUT") || msg.includes("ECONNREFUSED")) {
+    return "AI service is currently unreachable. Please try again later.";
+  }
+  if (msg.includes("Unsupported parameter")) {
+    return "AI service request error. Please try again.";
+  }
+  return "An unexpected error occurred. Please try again.";
+}
+
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+
+function rateLimit(windowMs: number, maxRequests: number) {
+  return (req: Request, res: Response, next: Function) => {
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    const now = Date.now();
+    const entry = rateLimitStore.get(ip);
+
+    if (!entry || now > entry.resetAt) {
+      rateLimitStore.set(ip, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+
+    if (entry.count >= maxRequests) {
+      return res.status(429).json({
+        message: "Too many requests. Please wait before trying again.",
+      });
+    }
+
+    entry.count++;
+    return next();
+  };
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of rateLimitStore) {
+    if (now > entry.resetAt) {
+      rateLimitStore.delete(ip);
+    }
+  }
+}, 60_000);
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
 
+  const scanLimiter = rateLimit(60_000, 10);
+  const analyzeLimiter = rateLimit(60_000, 30);
+  const summaryLimiter = rateLimit(60_000, 10);
+
   // ─── Scan endpoint ─────────────────────────────────────────────
 
-  app.post("/api/scan", async (req, res) => {
+  app.post("/api/scan", scanLimiter, async (req, res) => {
     try {
       const parsed = scanRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -47,14 +115,14 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("Scan error:", error);
       return res.status(500).json({
-        message: error.message || "Internal server error during scan.",
+        message: "Scan failed due to an internal error. Please try again.",
       });
     }
   });
 
   // ─── Per-finding AI analysis ───────────────────────────────────
 
-  app.post("/api/analyze", async (req, res) => {
+  app.post("/api/analyze", analyzeLimiter, async (req, res) => {
     try {
       const parsed = analyzeRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -101,19 +169,23 @@ Be specific and practical. Reference the actual service and real-world attack sc
         return res.status(500).json({ message: "AI analysis returned empty response." });
       }
 
-      const analysis = JSON.parse(content);
+      const { data: analysis, error } = safeJsonParse(content);
+      if (error) {
+        return res.status(502).json({ message: error });
+      }
+
       return res.json(analysis);
     } catch (error: any) {
       console.error("Analysis error:", error);
       return res.status(500).json({
-        message: error.message || "AI analysis failed.",
+        message: sanitizeErrorMessage(error),
       });
     }
   });
 
   // ─── Holistic AI scan summary ──────────────────────────────────
 
-  app.post("/api/summary", async (req, res) => {
+  app.post("/api/summary", summaryLimiter, async (req, res) => {
     try {
       const parsed = summaryRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -172,12 +244,16 @@ Be specific, practical, and reference the actual findings. Do not be generic. Re
         return res.status(500).json({ message: "AI summary returned empty response." });
       }
 
-      const summary = JSON.parse(content);
+      const { data: summary, error } = safeJsonParse(content);
+      if (error) {
+        return res.status(502).json({ message: error });
+      }
+
       return res.json(summary);
     } catch (error: any) {
       console.error("Summary error:", error);
       return res.status(500).json({
-        message: error.message || "AI summary generation failed.",
+        message: sanitizeErrorMessage(error),
       });
     }
   });
