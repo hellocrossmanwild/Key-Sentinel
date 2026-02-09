@@ -2,16 +2,22 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Shield, Search, AlertTriangle, Github, Globe, ArrowRight, Loader2, FileSearch, Clock, ShieldAlert, ShieldCheck, Copy, Check, Eye, EyeOff, Sparkles, ChevronDown, ChevronUp, Info, Wrench, Lock, Zap } from "lucide-react";
+import { Shield, Search, AlertTriangle, Github, Globe, ArrowRight, Loader2, FileSearch, Clock, ShieldAlert, ShieldCheck, Copy, Check, Eye, EyeOff, Sparkles, ChevronDown, ChevronUp, Info, Wrench, Lock, Zap, History, Map, FolderOpen, Key } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { apiRequest } from "@/lib/queryClient";
 import { scanRequestSchema, type ScanRequest, type ScanResult, type KeyFinding, type AIAnalysis } from "@shared/schema";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { SecurityScoreCard } from "@/components/security-score";
+import { HeaderFindings } from "@/components/header-findings";
+import { PathFindings } from "@/components/path-findings";
+import { ScanSummaryPanel } from "@/components/scan-summary";
+import { ReportExportButton } from "@/components/report-export";
 
 function SeverityBadge({ severity }: { severity: KeyFinding["severity"] }) {
   const variants: Record<string, string> = {
@@ -24,6 +30,22 @@ function SeverityBadge({ severity }: { severity: KeyFinding["severity"] }) {
   return (
     <Badge className={`${variants[severity]} text-xs uppercase tracking-wider font-semibold no-default-hover-elevate no-default-active-elevate`} data-testid={`badge-severity-${severity}`}>
       {severity}
+    </Badge>
+  );
+}
+
+function SourceBadge({ source }: { source?: string }) {
+  if (!source || source === "pattern") return null;
+  const labels: Record<string, string> = {
+    entropy: "Entropy",
+    bundle: "Bundle",
+    "git-history": "Git History",
+  };
+  return (
+    <Badge variant="outline" className="text-xs gap-1">
+      {source === "git-history" && <History className="w-2.5 h-2.5" />}
+      {source === "bundle" && <Key className="w-2.5 h-2.5" />}
+      {labels[source] || source}
     </Badge>
   );
 }
@@ -151,6 +173,7 @@ function FindingCard({ finding, index, sourceUrl }: { finding: KeyFinding; index
             <ShieldAlert className="w-4 h-4 text-destructive flex-shrink-0" />
             <span className="font-semibold text-sm" data-testid={`text-key-type-${index}`}>{finding.keyType}</span>
             <SeverityBadge severity={finding.severity} />
+            <SourceBadge source={finding.source} />
           </div>
           <div className="flex items-center gap-1">
             <Button
@@ -221,16 +244,100 @@ function FindingCard({ finding, index, sourceUrl }: { finding: KeyFinding; index
   );
 }
 
+function JWTFindingCard({ finding, index }: { finding: any; index: number }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <Card className="transition-all duration-200">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Key className="w-4 h-4 text-primary flex-shrink-0" />
+            <span className="font-semibold text-sm">JWT Token</span>
+            <SeverityBadge severity={finding.severity} />
+            {finding.isExpired && <Badge variant="outline" className="text-xs">Expired</Badge>}
+            {finding.hasUserData && <Badge variant="destructive" className="text-xs">Contains User Data</Badge>}
+          </div>
+          <Button variant="ghost" size="icon" onClick={() => setExpanded(!expanded)}>
+            {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </Button>
+        </div>
+
+        <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+          <FileSearch className="w-3 h-3" />
+          <span>{finding.file}:{finding.line}</span>
+          {finding.issuer && <span>| Issuer: {finding.issuer}</span>}
+          {finding.expiresAt && <span>| Expires: {new Date(finding.expiresAt).toLocaleDateString()}</span>}
+        </div>
+
+        {expanded && (
+          <div className="mt-3 space-y-2 animate-in fade-in duration-200">
+            <div className="rounded-md bg-muted p-3">
+              <p className="text-xs font-semibold text-muted-foreground mb-1">Decoded Payload</p>
+              <pre className="text-xs font-mono whitespace-pre-wrap break-all">
+                {JSON.stringify(finding.payload, null, 2)}
+              </pre>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SourceMapFindings({ result }: { result: any }) {
+  if (!result || result.mapsFound === 0) return null;
+
+  return (
+    <Card data-testid="card-source-maps">
+      <CardContent className="p-5 space-y-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Map className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-sm">Source Map Exposure</h3>
+          </div>
+          <Badge variant="destructive" className="text-xs">
+            {result.mapsFound} source map{result.mapsFound !== 1 ? "s" : ""} exposed
+          </Badge>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Exposed source maps reveal your original unminified source code, file structure, and may contain hardcoded secrets.
+        </p>
+        {result.exposedFiles.map((file: any, i: number) => (
+          <div key={i} className="p-2.5 rounded-md bg-muted/30 space-y-1">
+            <code className="text-xs font-semibold break-all">{file.mapUrl}</code>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span>{file.totalOriginalFiles} original files</span>
+              <span>{(file.contentSize / 1024).toFixed(1)} KB</span>
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 function ScanResults({ result }: { result: ScanResult }) {
   const criticalCount = result.findings.filter(f => f.severity === "critical").length;
   const highCount = result.findings.filter(f => f.severity === "high").length;
   const mediumCount = result.findings.filter(f => f.severity === "medium").length;
   const lowCount = result.findings.filter(f => f.severity === "low").length;
 
-  const isClean = result.findings.length === 0;
+  const isClean = result.findings.length === 0 &&
+    (!result.sensitivePathResult || result.sensitivePathResult.pathsFound.length === 0) &&
+    (!result.sourceMapResult || result.sourceMapResult.mapsFound === 0);
+
+  const hasExtraFindings = result.headerAnalysis || result.sensitivePathResult?.pathsFound.length ||
+    result.sourceMapResult?.mapsFound || result.jwtFindings?.length || result.gitHistoryFindings?.length;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Security Score */}
+      {result.securityScore && (
+        <SecurityScoreCard score={result.securityScore} />
+      )}
+
+      {/* Summary stats card */}
       <Card data-testid="card-scan-summary">
         <CardContent className="p-6">
           <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -255,6 +362,7 @@ function ScanResults({ result }: { result: ScanResult }) {
             </div>
 
             <div className="flex items-center gap-2">
+              <ReportExportButton result={result} />
               <Badge variant="outline" className="gap-1">
                 {result.scanType === "github" ? <Github className="w-3 h-3" /> : <Globe className="w-3 h-3" />}
                 {result.scanType === "github" ? "GitHub" : "Website"}
@@ -295,18 +403,135 @@ function ScanResults({ result }: { result: ScanResult }) {
               <div className="text-xs text-muted-foreground mt-1">Top Severity</div>
             </div>
           </div>
+
+          {/* Extra scan metadata */}
+          {(result.pagesScanned || result.commitsScanned) && (
+            <div className="flex items-center gap-4 mt-4 text-xs text-muted-foreground">
+              {result.pagesScanned && <span>Pages crawled: {result.pagesScanned}</span>}
+              {result.commitsScanned && <span>Commits scanned: {result.commitsScanned}</span>}
+              {result.sensitivePathResult && <span>Paths probed: {result.sensitivePathResult.pathsChecked}</span>}
+              {result.sourceMapResult && result.sourceMapResult.mapsFound > 0 && (
+                <span>Source maps: {result.sourceMapResult.mapsFound}</span>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {result.findings.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider px-1">
-            Detected Exposures
-          </h3>
-          {result.findings.map((finding, index) => (
-            <FindingCard key={index} finding={finding} index={index} sourceUrl={result.url} />
-          ))}
-        </div>
+      {/* AI Summary */}
+      <ScanSummaryPanel result={result} />
+
+      {/* Tabbed results */}
+      {hasExtraFindings ? (
+        <Tabs defaultValue="secrets" className="space-y-4">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 h-auto">
+            <TabsTrigger value="secrets" className="gap-1.5 text-xs">
+              <ShieldAlert className="w-3.5 h-3.5" />
+              Secrets ({result.findings.length})
+            </TabsTrigger>
+            {result.headerAnalysis && (
+              <TabsTrigger value="headers" className="gap-1.5 text-xs">
+                <Globe className="w-3.5 h-3.5" />
+                Headers
+              </TabsTrigger>
+            )}
+            {result.sensitivePathResult && result.sensitivePathResult.pathsFound.length > 0 && (
+              <TabsTrigger value="paths" className="gap-1.5 text-xs">
+                <FolderOpen className="w-3.5 h-3.5" />
+                Paths ({result.sensitivePathResult.pathsFound.length})
+              </TabsTrigger>
+            )}
+            {((result.sourceMapResult && result.sourceMapResult.mapsFound > 0) || (result.jwtFindings && result.jwtFindings.length > 0)) && (
+              <TabsTrigger value="advanced" className="gap-1.5 text-xs">
+                <Key className="w-3.5 h-3.5" />
+                Advanced
+              </TabsTrigger>
+            )}
+            {result.gitHistoryFindings && result.gitHistoryFindings.length > 0 && (
+              <TabsTrigger value="history" className="gap-1.5 text-xs">
+                <History className="w-3.5 h-3.5" />
+                Git History ({result.gitHistoryFindings.length})
+              </TabsTrigger>
+            )}
+          </TabsList>
+
+          <TabsContent value="secrets" className="space-y-3">
+            {result.findings.length > 0 ? (
+              <>
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider px-1">
+                  Detected Exposures
+                </h3>
+                {result.findings.map((finding, index) => (
+                  <FindingCard key={index} finding={finding} index={index} sourceUrl={result.url} />
+                ))}
+              </>
+            ) : (
+              <Card>
+                <CardContent className="p-6 text-center">
+                  <ShieldCheck className="w-8 h-8 text-green-600 dark:text-green-400 mx-auto mb-2" />
+                  <p className="text-sm font-medium">No exposed secrets detected</p>
+                  <p className="text-xs text-muted-foreground mt-1">Pattern and entropy scanning found no API keys or credentials.</p>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          {result.headerAnalysis && (
+            <TabsContent value="headers">
+              <HeaderFindings analysis={result.headerAnalysis} />
+            </TabsContent>
+          )}
+
+          {result.sensitivePathResult && result.sensitivePathResult.pathsFound.length > 0 && (
+            <TabsContent value="paths">
+              <PathFindings result={result.sensitivePathResult} />
+            </TabsContent>
+          )}
+
+          {((result.sourceMapResult && result.sourceMapResult.mapsFound > 0) || (result.jwtFindings && result.jwtFindings.length > 0)) && (
+            <TabsContent value="advanced" className="space-y-4">
+              {result.sourceMapResult && result.sourceMapResult.mapsFound > 0 && (
+                <SourceMapFindings result={result.sourceMapResult} />
+              )}
+              {result.jwtFindings && result.jwtFindings.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider px-1">
+                    JWT Tokens ({result.jwtFindings.length})
+                  </h3>
+                  {result.jwtFindings.map((jwt, i) => (
+                    <JWTFindingCard key={i} finding={jwt} index={i} />
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          )}
+
+          {result.gitHistoryFindings && result.gitHistoryFindings.length > 0 && (
+            <TabsContent value="history" className="space-y-3">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider px-1">
+                Secrets Found in Git History
+              </h3>
+              <p className="text-xs text-muted-foreground px-1">
+                These secrets were found in commit diffs — they may have been "deleted" but still live in git history.
+              </p>
+              {result.gitHistoryFindings.map((finding, index) => (
+                <FindingCard key={index} finding={finding} index={1000 + index} sourceUrl={result.url} />
+              ))}
+            </TabsContent>
+          )}
+        </Tabs>
+      ) : (
+        /* No tabs needed — just show secrets list */
+        result.findings.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider px-1">
+              Detected Exposures
+            </h3>
+            {result.findings.map((finding, index) => (
+              <FindingCard key={index} finding={finding} index={index} sourceUrl={result.url} />
+            ))}
+          </div>
+        )
       )}
     </div>
   );
@@ -328,16 +553,16 @@ export default function Home() {
 
   const scanMutation = useMutation({
     mutationFn: async (data: ScanRequest) => {
-      setScanProgress(10);
+      setScanProgress(5);
       const progressInterval = setInterval(() => {
         setScanProgress(prev => {
-          if (prev >= 85) {
+          if (prev >= 90) {
             clearInterval(progressInterval);
-            return 85;
+            return 90;
           }
-          return prev + Math.random() * 15;
+          return prev + Math.random() * 8;
         });
-      }, 500);
+      }, 800);
 
       try {
         const res = await apiRequest("POST", "/api/scan", { url: data.url });
@@ -365,6 +590,24 @@ export default function Home() {
     scanMutation.mutate(data);
   };
 
+  const progressLabel = scanProgress < 15
+    ? "Starting scan engines..."
+    : scanProgress < 30
+    ? "Crawling pages & fetching content..."
+    : scanProgress < 45
+    ? "Probing sensitive paths..."
+    : scanProgress < 55
+    ? "Analyzing HTTP headers..."
+    : scanProgress < 65
+    ? "Scanning for source maps..."
+    : scanProgress < 75
+    ? "Running 200+ pattern matchers..."
+    : scanProgress < 85
+    ? "Entropy analysis & JWT detection..."
+    : scanProgress < 90
+    ? "Calculating security score..."
+    : "Finalizing results...";
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b">
@@ -391,7 +634,7 @@ export default function Home() {
             API Key Exposure Scanner
           </h1>
           <p className="text-muted-foreground max-w-xl mx-auto text-sm sm:text-base">
-            Enter a public GitHub repository URL or any public website URL to scan for exposed API keys, secrets, and credentials.
+            Deep-scan any public URL for exposed secrets, API keys, credentials, and security misconfigurations with AI-powered analysis.
           </p>
         </div>
 
@@ -424,18 +667,22 @@ export default function Home() {
                 />
 
                 <div className="flex items-center justify-between gap-4 flex-wrap">
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                     <span className="flex items-center gap-1.5">
-                      <Github className="w-3.5 h-3.5" />
-                      Public repos
+                      <Search className="w-3.5 h-3.5" />
+                      200+ patterns
                     </span>
                     <span className="flex items-center gap-1.5">
                       <Globe className="w-3.5 h-3.5" />
-                      Public websites
+                      Multi-page crawl
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <ShieldAlert className="w-3.5 h-3.5" />
+                      Header & path analysis
                     </span>
                     <span className="flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5" />
-                      AI-powered analysis
+                      AI analysis
                     </span>
                   </div>
                   <Button
@@ -452,7 +699,7 @@ export default function Home() {
                     ) : (
                       <>
                         <Search className="w-4 h-4" />
-                        Scan URL
+                        Deep Scan
                         <ArrowRight className="w-3.5 h-3.5" />
                       </>
                     )}
@@ -463,7 +710,7 @@ export default function Home() {
                   <div className="space-y-2 animate-in fade-in duration-300">
                     <Progress value={scanProgress} className="h-1.5" data-testid="progress-scan" />
                     <p className="text-xs text-muted-foreground text-center">
-                      {scanProgress < 30 ? "Fetching content..." : scanProgress < 60 ? "Analyzing files for exposed keys..." : scanProgress < 85 ? "Running pattern matching..." : "Finalizing results..."}
+                      {progressLabel}
                     </p>
                   </div>
                 )}
@@ -489,15 +736,26 @@ export default function Home() {
         {result && <ScanResults result={result} />}
 
         {!result && !scanMutation.isPending && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="hover-elevate" data-testid="card-feature-patterns">
               <CardContent className="p-5 text-center space-y-3">
                 <div className="mx-auto w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
                   <Search className="w-5 h-5 text-primary" />
                 </div>
-                <h3 className="font-semibold text-sm">30+ Key Patterns</h3>
+                <h3 className="font-semibold text-sm">200+ Key Patterns</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Detects AWS, Stripe, OpenAI, Firebase, GitHub tokens, and many more common API key formats.
+                  Detects AWS, Stripe, OpenAI, Azure, GCP, GitHub, and 200+ more API key formats with entropy analysis.
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="hover-elevate" data-testid="card-feature-deep">
+              <CardContent className="p-5 text-center space-y-3">
+                <div className="mx-auto w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
+                  <Globe className="w-5 h-5 text-primary" />
+                </div>
+                <h3 className="font-semibold text-sm">Deep Scanning</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Multi-page crawling, source map detection, sensitive path probing, HTTP header analysis, and JS bundle inspection.
                 </p>
               </CardContent>
             </Card>
@@ -506,20 +764,20 @@ export default function Home() {
                 <div className="mx-auto w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
                   <Github className="w-5 h-5 text-primary" />
                 </div>
-                <h3 className="font-semibold text-sm">GitHub Repos</h3>
+                <h3 className="font-semibold text-sm">Git History Scan</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Scans all files in public repositories including config files, source code, and environment files.
+                  Scans commit history for secrets that were "deleted" but still live in git — up to 200 files per repo.
                 </p>
               </CardContent>
             </Card>
-            <Card className="hover-elevate" data-testid="card-feature-web">
+            <Card className="hover-elevate" data-testid="card-feature-ai">
               <CardContent className="p-5 text-center space-y-3">
                 <div className="mx-auto w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
                   <Sparkles className="w-5 h-5 text-primary" />
                 </div>
-                <h3 className="font-semibold text-sm">AI Analysis</h3>
+                <h3 className="font-semibold text-sm">AI Analysis & Reports</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Get AI-powered analysis of each finding with security implications, access scope, and remediation steps.
+                  Get AI-powered risk assessment, attack scenarios, remediation steps, and exportable security reports.
                 </p>
               </CardContent>
             </Card>
