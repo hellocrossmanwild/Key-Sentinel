@@ -334,7 +334,7 @@ export const KEY_PATTERNS: KeyPattern[] = [
   },
   {
     name: "Google OAuth Client Secret",
-    pattern: /(?:client_secret)\s*[:=]\s*["']?([A-Za-z0-9_-]{24,})["']?/gi,
+    pattern: /(?:google[_\s-]*)?client[_\s-]*secret\s*[:=]\s*["']([A-Za-z0-9_-]{24,})["']/gi,
     severity: "high",
   },
   {
@@ -422,7 +422,7 @@ export const KEY_PATTERNS: KeyPattern[] = [
   // --- Telegram ---
   {
     name: "Telegram Bot Token",
-    pattern: /(\d{8,10}:[A-Za-z0-9_-]{35})/g,
+    pattern: /(?:telegram|bot[_\s-]*token|TELEGRAM_BOT_TOKEN)\s*[=:]\s*["']?(\d{8,10}:[A-Za-z0-9_-]{35})["']?/gi,
     severity: "high",
   },
 
@@ -1081,39 +1081,39 @@ export const KEY_PATTERNS: KeyPattern[] = [
   // --- Generic API Key Patterns ---
   {
     name: "Generic API Key Assignment",
-    pattern: /(?:api[_-]?key|apikey)\s*[=:]\s*["']([A-Za-z0-9_\-]{20,})["']/gi,
+    pattern: /(?:api[_-]?key|apikey)\s*[=:]\s*["']([A-Za-z0-9_\-]{24,})["']/gi,
     severity: "medium",
   },
   {
     name: "Generic API Secret Assignment",
-    pattern: /(?:api[_-]?secret)\s*[=:]\s*["']([A-Za-z0-9_\-]{20,})["']/gi,
+    pattern: /(?:api[_-]?secret)\s*[=:]\s*["']([A-Za-z0-9_\-]{24,})["']/gi,
     severity: "medium",
   },
   {
     name: "Generic API Token Assignment",
-    pattern: /(?:api[_-]?token)\s*[=:]\s*["']([A-Za-z0-9_\-]{20,})["']/gi,
+    pattern: /(?:api[_-]?token)\s*[=:]\s*["']([A-Za-z0-9_\-]{24,})["']/gi,
     severity: "medium",
   },
   {
     name: "Generic Client Secret Assignment",
-    pattern: /(?:client[_-]?secret)\s*[=:]\s*["']([A-Za-z0-9_\-]{20,})["']/gi,
+    pattern: /(?:client[_-]?secret)\s*[=:]\s*["']([A-Za-z0-9_\-]{24,})["']/gi,
     severity: "medium",
   },
   {
     name: "Generic App Secret Assignment",
-    pattern: /(?:app[_-]?secret)\s*[=:]\s*["']([A-Za-z0-9_\-]{20,})["']/gi,
+    pattern: /(?:app[_-]?secret)\s*[=:]\s*["']([A-Za-z0-9_\-]{24,})["']/gi,
     severity: "medium",
   },
 
   // --- Generic Secret Patterns ---
   {
     name: "Generic Secret Assignment",
-    pattern: /(?:secret)\s*[=:]\s*["']([A-Za-z0-9_\-!@#$%^&*]{12,})["']/gi,
+    pattern: /(?:secret)\s*[=:]\s*["']([A-Za-z0-9_\-!@#$%^&*]{16,})["']/gi,
     severity: "medium",
   },
   {
     name: "Generic Password Assignment",
-    pattern: /(?:password|passwd|pwd)\s*[=:]\s*["']([^\s"']{8,})["']/gi,
+    pattern: /(?:password|passwd|pwd)\s*[=:]\s*["']([^\s"']{12,})["']/gi,
     severity: "medium",
   },
   {
@@ -1130,22 +1130,22 @@ export const KEY_PATTERNS: KeyPattern[] = [
   // --- Generic Token Patterns ---
   {
     name: "Generic Token Assignment",
-    pattern: /(?:^|[^a-z])(?:token)\s*[=:]\s*["']([A-Za-z0-9_\-]{20,})["']/gi,
+    pattern: /(?:^|[^a-z])(?:token)\s*[=:]\s*["']([A-Za-z0-9_\-]{24,})["']/gi,
     severity: "medium",
   },
   {
     name: "Generic Access Token Assignment",
-    pattern: /(?:access[_-]?token)\s*[=:]\s*["']([A-Za-z0-9_\-]{20,})["']/gi,
+    pattern: /(?:access[_-]?token)\s*[=:]\s*["']([A-Za-z0-9_\-]{24,})["']/gi,
     severity: "medium",
   },
   {
     name: "Generic Auth Token Assignment",
-    pattern: /(?:auth[_-]?token)\s*[=:]\s*["']([A-Za-z0-9_\-]{20,})["']/gi,
+    pattern: /(?:auth[_-]?token)\s*[=:]\s*["']([A-Za-z0-9_\-]{24,})["']/gi,
     severity: "medium",
   },
   {
     name: "Generic Refresh Token Assignment",
-    pattern: /(?:refresh[_-]?token)\s*[=:]\s*["']([A-Za-z0-9_\-]{20,})["']/gi,
+    pattern: /(?:refresh[_-]?token)\s*[=:]\s*["']([A-Za-z0-9_\-]{24,})["']/gi,
     severity: "medium",
   },
 
@@ -1437,7 +1437,7 @@ export const KEY_PATTERNS: KeyPattern[] = [
   },
   {
     name: "Hardcoded Boolean/Flag Secret",
-    pattern: /(?:(?:is[_-]?)?(?:debug|verbose|testing|dev[_-]?mode))\s*[=:]\s*["']?(true|1|yes|on)["']?/gi,
+    pattern: /(?:(?:is[_-]?)?(?:debug|verbose|testing|dev[_-]?mode))\s*[=:]\s*["'](true|yes|on)["']/gi,
     severity: "low",
   },
 ];

@@ -474,11 +474,12 @@ const detectHardcodedCredentials: Detector = (content, filePath) => {
     if (/^\$\{/.test(value)) continue;
     if (/^[{<]/.test(value)) continue;
     if (/[;{}]/.test(value)) continue;
-    // Skip common false positives like "use strict", node module paths, etc.
-    if (/^(use strict|undefined|null|true|false|none|function)$/i.test(value)) continue;
+    if (/^(use strict|undefined|null|true|false|none|nil|nan|infinity|function|object|string|number|boolean|symbol|bigint|required|optional|default|inherit|initial|unset|enabled|disabled|active|inactive|pending|loading|success|failure|error|warning|unknown|anonymous|localhost|production|development|staging|changeme|password|username|admin1234|administrator)$/i.test(value)) continue;
     if (/^\.{0,2}\//.test(value)) continue;
-    // Skip if the value is purely lowercase alpha (likely a word, not a secret)
+    if (/^https?:\/\//i.test(value) && !/:.*@/.test(value)) continue;
     if (/^[a-z]+$/.test(value)) continue;
+    if (/^[A-Z_]+$/.test(value)) continue;
+    if (/^(example|test|demo|sample|placeholder|dummy|fake|mock|temp|your[_-]|my[_-]|replace[_-]?me|insert[_-]?here|change[_-]?me)/i.test(value)) continue;
 
     const uid = `cred:${varName}:${value}`;
     if (seen.has(uid)) continue;

@@ -34,6 +34,43 @@ function shouldSkipFile(filename: string): boolean {
 
 // ─── Pattern-based content scanning ──────────────────────────────
 
+const KNOWN_FALSE_POSITIVE_VALUES = new Set([
+  "undefined", "null", "true", "false", "none", "nil", "nan", "infinity",
+  "function", "object", "string", "number", "boolean", "symbol", "bigint",
+  "required", "optional", "default", "inherit", "initial", "unset",
+  "enabled", "disabled", "active", "inactive", "pending", "loading",
+  "success", "failure", "error", "warning", "unknown", "anonymous",
+  "localhost", "production", "development", "staging", "changeme",
+  "password", "username", "admin1234", "administrator",
+]);
+
+const FALSE_POSITIVE_PATTERNS = [
+  /^(example|test|demo|sample|placeholder|your[_-]|my[_-]|fake[_-]|mock[_-]|dummy[_-]|temp[_-])/i,
+  /^(replace[_-]?me|insert[_-]?here|change[_-]?me|todo|fixme|hack|xxx)/i,
+  /^x{4,}$/i,
+  /^\*+$/,
+  /^\.{3,}$/,
+  /^[0]+$/,
+  /^[1]+$/,
+  /^\$[A-Z_]+$/i,
+  /^\$\{[^}]+\}$/,
+  /^%[A-Z_]+%$/i,
+  /^\.{0,2}\//,
+  /^https?:\/\/(?!.*:.*@)/,
+  /[{}<>;]/,
+  /^[a-z]+$/,
+  /^[A-Z_]+$/,
+  /^(sk[_-]test|pk[_-]test|rk[_-]test)/i,
+];
+
+function isPatternFalsePositive(value: string): boolean {
+  if (KNOWN_FALSE_POSITIVE_VALUES.has(value.toLowerCase())) return true;
+  for (const pattern of FALSE_POSITIVE_PATTERNS) {
+    if (pattern.test(value)) return true;
+  }
+  return false;
+}
+
 export function scanContent(content: string, filename: string): KeyFinding[] {
   const findings: KeyFinding[] = [];
   const seen = new Set<string>();
@@ -48,11 +85,21 @@ export function scanContent(content: string, filename: string): KeyFinding[] {
 
       if (trimmedValue.length < 8) continue;
       if (/^[a-z_]+$/i.test(trimmedValue)) continue;
-      if (/^(example|test|demo|sample|placeholder|your[_-])/i.test(trimmedValue)) continue;
-      if (/^x{4,}$/i.test(trimmedValue) || /^\*+$/.test(trimmedValue)) continue;
-      if (/^[0]+$/.test(trimmedValue) || /^[1]+$/.test(trimmedValue)) continue;
-      if (/^\$[A-Z_]+$/i.test(trimmedValue)) continue;
-      if (/^\$\{[^}]+\}$/.test(trimmedValue)) continue;
+      if (isPatternFalsePositive(trimmedValue)) continue;
+
+      const isGenericPattern = keyPattern.name.startsWith("Generic ") ||
+        keyPattern.name.startsWith("Hardcoded ") ||
+        keyPattern.name.includes("Flag") ||
+        keyPattern.name.includes("Common Weak");
+
+      if (isGenericPattern) {
+        const hasUpper = /[A-Z]/.test(trimmedValue);
+        const hasLower = /[a-z]/.test(trimmedValue);
+        const hasDigit = /\d/.test(trimmedValue);
+        const hasSpecial = /[_\-+/=!@#$%^&*]/.test(trimmedValue);
+        const charClasses = [hasUpper, hasLower, hasDigit, hasSpecial].filter(Boolean).length;
+        if (charClasses < 2 && trimmedValue.length < 20) continue;
+      }
 
       const key = `${keyPattern.name}:${trimmedValue}`;
       if (seen.has(key)) continue;
