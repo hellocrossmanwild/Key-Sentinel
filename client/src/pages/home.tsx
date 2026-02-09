@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Shield, Search, AlertTriangle, CheckCircle2, Github, Globe, ArrowRight, Loader2, FileSearch, Clock, ShieldAlert, ShieldCheck, Copy, Check, Eye, EyeOff } from "lucide-react";
+import { Shield, Search, AlertTriangle, Github, Globe, ArrowRight, Loader2, FileSearch, Clock, ShieldAlert, ShieldCheck, Copy, Check, Eye, EyeOff, Sparkles, ChevronDown, ChevronUp, Info, Wrench, Lock, Zap } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { apiRequest } from "@/lib/queryClient";
-import { scanRequestSchema, type ScanRequest, type ScanResult, type KeyFinding } from "@shared/schema";
+import { scanRequestSchema, type ScanRequest, type ScanResult, type KeyFinding, type AIAnalysis } from "@shared/schema";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 function SeverityBadge({ severity }: { severity: KeyFinding["severity"] }) {
@@ -28,14 +28,114 @@ function SeverityBadge({ severity }: { severity: KeyFinding["severity"] }) {
   );
 }
 
-function FindingCard({ finding, index }: { finding: KeyFinding; index: number }) {
+function AnalysisPanel({ analysis }: { analysis: AIAnalysis }) {
+  return (
+    <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+      <div className="rounded-md bg-muted/50 p-4 space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="p-1.5 rounded-md bg-primary/10 flex-shrink-0 mt-0.5">
+            <Info className="w-3.5 h-3.5 text-primary" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Service</p>
+            <p className="text-sm font-medium" data-testid="text-analysis-service">{analysis.service}</p>
+            <p className="text-xs text-muted-foreground mt-1" data-testid="text-analysis-description">{analysis.description}</p>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-3">
+          <div className="p-1.5 rounded-md bg-destructive/10 flex-shrink-0 mt-0.5">
+            <ShieldAlert className="w-3.5 h-3.5 text-destructive" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Security Implications</p>
+            <ul className="space-y-1" data-testid="list-implications">
+              {analysis.implications.map((item, i) => (
+                <li key={i} className="text-xs text-foreground flex items-start gap-2">
+                  <span className="text-destructive mt-0.5 flex-shrink-0">-</span>
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-3">
+          <div className="p-1.5 rounded-md bg-primary/10 flex-shrink-0 mt-0.5">
+            <Lock className="w-3.5 h-3.5 text-primary" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Access Scope</p>
+            <p className="text-xs" data-testid="text-analysis-scope">{analysis.accessScope}</p>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-3">
+          <div className="p-1.5 rounded-md bg-green-500/10 dark:bg-green-500/15 flex-shrink-0 mt-0.5">
+            <Wrench className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Remediation Steps</p>
+            <ol className="space-y-1" data-testid="list-remediation">
+              {analysis.remediation.map((step, i) => (
+                <li key={i} className="text-xs text-foreground flex items-start gap-2">
+                  <span className="text-green-600 dark:text-green-400 font-semibold mt-0.5 flex-shrink-0">{i + 1}.</span>
+                  {step}
+                </li>
+              ))}
+            </ol>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-3">
+          <div className="p-1.5 rounded-md bg-primary/10 flex-shrink-0 mt-0.5">
+            <Zap className="w-3.5 h-3.5 text-primary" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Risk Assessment</p>
+            <p className="text-xs" data-testid="text-analysis-risk">{analysis.riskLevel}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FindingCard({ finding, index, sourceUrl }: { finding: KeyFinding; index: number; sourceUrl: string }) {
   const [copied, setCopied] = useState(false);
   const [revealed, setRevealed] = useState(false);
+  const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
+  const [showAnalysis, setShowAnalysis] = useState(false);
+
+  const analyzeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/analyze", {
+        keyType: finding.keyType,
+        value: finding.value,
+        file: finding.file,
+        severity: finding.severity,
+        sourceUrl,
+      });
+      return await res.json() as AIAnalysis;
+    },
+    onSuccess: (data) => {
+      setAnalysis(data);
+      setShowAnalysis(true);
+    },
+  });
 
   const handleCopy = () => {
     navigator.clipboard.writeText(finding.value);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleAnalyze = () => {
+    if (analysis) {
+      setShowAnalysis(!showAnalysis);
+    } else {
+      analyzeMutation.mutate();
+    }
   };
 
   const maskValue = (val: string) => {
@@ -44,7 +144,7 @@ function FindingCard({ finding, index }: { finding: KeyFinding; index: number })
   };
 
   return (
-    <Card className="hover-elevate transition-all duration-200" data-testid={`card-finding-${index}`}>
+    <Card className="transition-all duration-200" data-testid={`card-finding-${index}`}>
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2 flex-wrap">
@@ -76,13 +176,46 @@ function FindingCard({ finding, index }: { finding: KeyFinding; index: number })
           {revealed ? finding.value : maskValue(finding.value)}
         </div>
 
-        <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-          <FileSearch className="w-3 h-3 flex-shrink-0" />
-          <span className="truncate" data-testid={`text-file-path-${index}`}>
-            {finding.file}
-            {finding.line ? `:${finding.line}` : ""}
-          </span>
+        <div className="mt-2 flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
+            <FileSearch className="w-3 h-3 flex-shrink-0" />
+            <span className="truncate" data-testid={`text-file-path-${index}`}>
+              {finding.file}
+              {finding.line ? `:${finding.line}` : ""}
+            </span>
+          </div>
+
+          <Button
+            variant={showAnalysis ? "secondary" : "outline"}
+            size="sm"
+            onClick={handleAnalyze}
+            disabled={analyzeMutation.isPending}
+            className="gap-1.5 text-xs flex-shrink-0"
+            data-testid={`button-analyze-${index}`}
+          >
+            {analyzeMutation.isPending ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Analyzing...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3 h-3" />
+                {analysis ? (showAnalysis ? "Hide Analysis" : "Show Analysis") : "AI Analysis"}
+                {analysis && (showAnalysis ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+              </>
+            )}
+          </Button>
         </div>
+
+        {analyzeMutation.isError && (
+          <div className="mt-2 text-xs text-destructive flex items-center gap-1.5">
+            <AlertTriangle className="w-3 h-3" />
+            Analysis failed. Please try again.
+          </div>
+        )}
+
+        {showAnalysis && analysis && <AnalysisPanel analysis={analysis} />}
       </CardContent>
     </Card>
   );
@@ -171,7 +304,7 @@ function ScanResults({ result }: { result: ScanResult }) {
             Detected Exposures
           </h3>
           {result.findings.map((finding, index) => (
-            <FindingCard key={index} finding={finding} index={index} />
+            <FindingCard key={index} finding={finding} index={index} sourceUrl={result.url} />
           ))}
         </div>
       )}
@@ -300,6 +433,10 @@ export default function Home() {
                       <Globe className="w-3.5 h-3.5" />
                       Public websites
                     </span>
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      AI-powered analysis
+                    </span>
                   </div>
                   <Button
                     type="submit"
@@ -378,11 +515,11 @@ export default function Home() {
             <Card className="hover-elevate" data-testid="card-feature-web">
               <CardContent className="p-5 text-center space-y-3">
                 <div className="mx-auto w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
-                  <Globe className="w-5 h-5 text-primary" />
+                  <Sparkles className="w-5 h-5 text-primary" />
                 </div>
-                <h3 className="font-semibold text-sm">Website Scanning</h3>
+                <h3 className="font-semibold text-sm">AI Analysis</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Fetches and analyzes page source, inline scripts, and linked JavaScript files for exposed secrets.
+                  Get AI-powered analysis of each finding with security implications, access scope, and remediation steps.
                 </p>
               </CardContent>
             </Card>

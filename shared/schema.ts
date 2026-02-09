@@ -24,3 +24,22 @@ export interface ScanResult {
   scanDuration: number;
   error?: string;
 }
+
+export const analyzeRequestSchema = z.object({
+  keyType: z.string(),
+  value: z.string(),
+  file: z.string(),
+  severity: z.string(),
+  sourceUrl: z.string(),
+});
+
+export type AnalyzeRequest = z.infer<typeof analyzeRequestSchema>;
+
+export interface AIAnalysis {
+  service: string;
+  description: string;
+  implications: string[];
+  accessScope: string;
+  remediation: string[];
+  riskLevel: string;
+}
